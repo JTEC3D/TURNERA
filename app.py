@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera Corregida", layout="wide")
+st.set_page_config(page_title="Turnera Final Normalizada", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -31,11 +31,11 @@ def obtener_turnos():
     c.execute("SELECT * FROM turnos")
     df = pd.DataFrame(c.fetchall(), columns=["ID", "Paciente", "Email", "Fecha", "Hora", "Observaciones"])
     df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce").dt.date
-    df["Hora"] = df["Hora"].astype(str).str.strip().str[:5]
+    df["Hora"] = df["Hora"].apply(lambda x: datetime.strptime(str(x).strip()[:5], "%H:%M").strftime("%H:%M"))
     return df
 
 # --- Interfaz ---
-st.title("🗓️ Turnera - Turnos corregidos")
+st.title("🗓️ Turnera - Horas normalizadas")
 
 # Carga de turnos
 st.subheader("➕ Cargar nuevo turno")
