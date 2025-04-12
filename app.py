@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera Mejorada", layout="wide")
+st.set_page_config(page_title="Turnera Final Completa", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -22,10 +22,10 @@ c.execute('''CREATE TABLE IF NOT EXISTS turnos (
 )''')
 conn.commit()
 
-# Verificar y agregar columna 'email' si no existe
+# Agregar columna email si falta
 c.execute("PRAGMA table_info(turnos)")
-columns = [col[1] for col in c.fetchall()]
-if "email" not in columns:
+columnas = [col[1] for col in c.fetchall()]
+if "email" not in columnas:
     c.execute("ALTER TABLE turnos ADD COLUMN email TEXT")
     conn.commit()
 
@@ -59,8 +59,10 @@ def generar_turnos_disponibles(desde):
             turnos.append({"Fecha": dia.date(), "Hora": hora})
     return pd.DataFrame(turnos)
 
-# --- Inicio ---
-st.title("🧠 Turnera Mejorada Final (con auto-fix de base de datos)")
+dias_es = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
+
+# --- Interfaz ---
+st.title("🧠 Turnera Final Completa")
 
 # --- Formulario de carga ---
 st.subheader("📅 Agendar nuevo turno")
@@ -76,25 +78,26 @@ if enviar:
     if paciente and email and observaciones:
         agregar_turno(paciente, email, fecha.isoformat(), hora.strftime("%H:%M"), observaciones)
         st.success("Turno agendado correctamente")
+        st.experimental_rerun()
     else:
         st.warning("Por favor, completá todos los campos obligatorios.")
 
-# --- Cargar datos y mostrar vista semanal ---
+# --- Cargar datos actuales ---
 df_ocupados = obtener_turnos()
 df_ocupados["Fecha"] = pd.to_datetime(df_ocupados["Fecha"])
 
-# Vista semanal
+# --- Vista semanal con encabezado español ---
 def mostrar_vista_semanal(titulo, desde, key_prefix):
     st.subheader(titulo)
-    df_disponibles = generar_turnos_disponibles(desde)
-    horas = sorted(df_disponibles["Hora"].unique())
-    dias = sorted(df_disponibles["Fecha"].unique())
+    df_disp = generar_turnos_disponibles(desde)
+    horas = sorted(df_disp["Hora"].unique())
+    dias = sorted(df_disp["Fecha"].unique())
 
     header_cols = st.columns(len(dias) + 1)
     header_cols[0].markdown("**Hora**")
     for i, dia in enumerate(dias):
-        nombre_dia = dia.strftime("%a %d/%m")
-        header_cols[i + 1].markdown(f"**{nombre_dia}**")
+        dia_nombre = dias_es[dia.weekday()]
+        header_cols[i + 1].markdown(f"**{dia_nombre} {dia.strftime('%d/%m')}**")
 
     for hora in horas:
         cols = st.columns(len(dias) + 1)
@@ -116,12 +119,11 @@ def mostrar_vista_semanal(titulo, desde, key_prefix):
             else:
                 cols[i + 1].markdown('<div style="background-color:#d4edda;padding:8px;border-radius:4px;text-align:center">Libre</div>', unsafe_allow_html=True)
 
-# Mostrar ambas semanas
 hoy = datetime.today()
 mostrar_vista_semanal("📆 Semana actual", hoy - timedelta(days=hoy.weekday()), "actual")
 mostrar_vista_semanal("📆 Semana siguiente", hoy - timedelta(days=hoy.weekday()) + timedelta(days=7), "siguiente")
 
-# Editor de turno seleccionado
+# --- Editor de turno seleccionado ---
 if st.session_state.get("turno_seleccionado"):
     turno = st.session_state["turno_seleccionado"]
     st.markdown("---")
@@ -146,3 +148,39 @@ if st.session_state.get("turno_seleccionado"):
         st.warning("Turno eliminado.")
         st.session_state["turno_seleccionado"] = None
         st.experimental_rerun()
+
+# --- Filtro por fecha ---
+st.subheader("🔎 Turnos por fecha")
+fecha_filtro = st.date_input("Seleccionar fecha", datetime.today())
+filtrados = df_ocupados[df_ocupados["Fecha"].dt.date == fecha_filtro]
+
+if not filtrados.empty:
+    for _, row in filtrados.iterrows():
+        with st.expander(f"{row['Paciente']} - {row['Fecha'].date()} {row['Hora']}"):
+            nuevo_paciente = st.text_input(f"Paciente_{row['ID']}", value=row['Paciente'], key=f"pac_{row['ID']}")
+            nuevo_email = st.text_input(f"Email_{row['ID']}", value=row['Email'], key=f"email_{row['ID']}")
+            nueva_fecha = st.date_input(f"Fecha_{row['ID']}", value=row['Fecha'].date(), key=f"fec_{row['ID']}")
+            nueva_hora = st.time_input(f"Hora_{row['ID']}", value=datetime.strptime(row['Hora'], "%H:%M").time(), key=f"hor_{row['ID']}")
+            nuevas_obs = st.text_area(f"Observaciones_{row['ID']}", value=row['Observaciones'], key=f"obs_{row['ID']}")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("💾 Guardar cambios", key=f"edit_{row['ID']}"):
+                    actualizar_turno(row['ID'], nuevo_paciente, nuevo_email, nueva_fecha.isoformat(), nueva_hora.strftime("%H:%M"), nuevas_obs)
+                    st.success("Turno actualizado")
+            with col2:
+                if st.button("🗑 Eliminar", key=f"del_{row['ID']}"):
+                    eliminar_turno(row['ID'])
+                    st.warning("Turno eliminado")
+else:
+    st.info("No hay turnos para la fecha seleccionada.")
+
+# --- Exportar ---
+st.subheader("📤 Exportar turnos")
+if not df_ocupados.empty:
+    if st.button("Exportar todos los turnos a Excel"):
+        df_export = df_ocupados.drop(columns="ID")
+        df_export.to_excel("turnos_exportados.xlsx", index=False)
+        with open("turnos_exportados.xlsx", "rb") as f:
+            st.download_button("Descargar Excel", data=f, file_name="turnos_exportados.xlsx")
+else:
+    st.info("No hay datos para exportar.")
