@@ -30,6 +30,10 @@ def actualizar_turno(turno_id, paciente, email, observaciones):
               (paciente, email, observaciones, turno_id))
     conn.commit()
 
+def eliminar_turno(turno_id):
+    c.execute("DELETE FROM turnos WHERE id = ?", (turno_id,))
+    conn.commit()
+
 def obtener_turnos():
     c.execute("SELECT * FROM turnos")
     df = pd.DataFrame(c.fetchall(), columns=["ID", "Paciente", "Email", "Fecha", "Hora", "Observaciones"])
@@ -42,7 +46,6 @@ def obtener_turnos():
     df["Hora"] = df["Hora"].apply(limpiar_hora)
     return df.dropna(subset=["Hora"])
 
-# UI
 st.title("📅 Turnera Profesional")
 st.subheader("➕ Cargar nuevo turno")
 
@@ -83,7 +86,7 @@ for d in dias:
         else:
             tabla.loc[h, col] = ""
 
-# Estilo con columnas alternadas
+# Estilo de tabla
 style = "<style>"
 style += "td, th { text-align: center; padding: 8px; font-family: sans-serif; }"
 style += "table { border-collapse: collapse; width: 100%; }"
@@ -99,21 +102,30 @@ style += "</style>"
 html = style + tabla.to_html(escape=False, index=True)
 st.markdown(html, unsafe_allow_html=True)
 
-# Editor de turnos debajo de la tabla
-st.subheader("✏️ Modificar un turno existente")
+# Editor de turnos con búsqueda por paciente
+st.subheader("✏️ Modificar o eliminar turno")
+
 if not df.empty:
-    selected_id = st.selectbox("Seleccioná un turno por ID", df["ID"])
-    turno_sel = df[df["ID"] == selected_id].iloc[0]
-    with st.form("edit_form"):
+    nombres = df["Paciente"].unique()
+    paciente_sel = st.selectbox("Buscar por paciente", nombres)
+    turno_sel = df[df["Paciente"] == paciente_sel].iloc[0]
+    with st.form("editar_turno"):
         nuevo_paciente = st.text_input("Paciente", value=turno_sel["Paciente"])
         nuevo_email = st.text_input("Email", value=turno_sel["Email"])
         nueva_obs = st.text_area("Observaciones", value=turno_sel["Observaciones"])
-        guardar_cambio = st.form_submit_button("Guardar cambios")
+        col1, col2 = st.columns(2)
+        with col1:
+            guardar_cambio = st.form_submit_button("Guardar cambios")
+        with col2:
+            eliminar = st.form_submit_button("Eliminar turno")
         if guardar_cambio:
-            actualizar_turno(selected_id, nuevo_paciente, nuevo_email, nueva_obs)
+            actualizar_turno(turno_sel["ID"], nuevo_paciente, nuevo_email, nueva_obs)
             st.success("✅ Turno actualizado. Recargá la app para ver los cambios.")
+        if eliminar:
+            eliminar_turno(turno_sel["ID"])
+            st.success("🗑️ Turno eliminado correctamente. Recargá la app.")
 else:
-    st.info("No hay turnos cargados para editar.")
+    st.info("No hay turnos cargados.")
 
 # Exportar Excel debajo del editor
 st.subheader("📤 Exportar a Excel")
