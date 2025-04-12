@@ -1,14 +1,13 @@
 
 import streamlit as st
-import pandas as pd
 import sqlite3
 import os
-from datetime import datetime, timedelta
-import plotly.express as px
-import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
+import matplotlib.pyplot as plt
+from datetime import datetime, timedelta, time
 
-st.set_page_config(page_title="Turnera - Vistas Demo Final", layout="wide")
+st.set_page_config(page_title="Turnera Final con Mapa de Calor", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -24,101 +23,99 @@ c.execute('''CREATE TABLE IF NOT EXISTS turnos (
 )''')
 conn.commit()
 
+# Agregar columna 'email' si falta
+c.execute("PRAGMA table_info(turnos)")
+columnas = [col[1] for col in c.fetchall()]
+if "email" not in columnas:
+    c.execute("ALTER TABLE turnos ADD COLUMN email TEXT")
+    conn.commit()
+
 # --- Funciones ---
+def normalizar_hora(hora_str):
+    try:
+        return datetime.strptime(hora_str.strip(), "%H:%M").strftime("%H:%M")
+    except:
+        try:
+            return datetime.strptime(hora_str.strip(), "%H:%M:%S").strftime("%H:%M")
+        except:
+            return "07:00"
+
+def agregar_turno(paciente, email, fecha, hora, observaciones):
+    hora_str = normalizar_hora(hora)
+    c.execute("INSERT INTO turnos (paciente, email, fecha, hora, observaciones) VALUES (?, ?, ?, ?, ?)",
+              (paciente, email, fecha, hora_str, observaciones))
+    conn.commit()
+
 def obtener_turnos():
     c.execute("SELECT * FROM turnos ORDER BY fecha, hora")
     df = pd.DataFrame(c.fetchall(), columns=["ID", "Paciente", "Email", "Fecha", "Hora", "Observaciones"])
-    df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
+    df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce").dt.date
     df = df.dropna(subset=["Fecha", "Hora"])
     df["Hora"] = df["Hora"].astype(str).str.strip().str[:5]
-    df["Datetime"] = pd.to_datetime(df["Fecha"].dt.strftime("%Y-%m-%d") + " " + df["Hora"], errors="coerce")
     return df
 
 def generar_base_semanal():
-    horarios_m = [f"{h:02d}:00" for h in list(range(7, 12))]
-    horarios_t = [f"{h:02d}:00" for h in list(range(15, 21))]
-    horarios = horarios_m + horarios_t
+    horarios_m = [f"{h:02d}:00" for h in range(7, 12)]
+    horarios_t = [f"{h:02d}:00" for h in range(15, 21)]
     base = []
     hoy = datetime.today()
     lunes = hoy - timedelta(days=hoy.weekday())
     for semana in [0, 1]:
         for dia in range(6):  # Lunes a sábado
             fecha = lunes + timedelta(days=dia + semana * 7)
-            if fecha.weekday() == 5:
-                horas = horarios_m
-            else:
-                horas = horarios
+            horas = horarios_m if fecha.weekday() == 5 else horarios_m + horarios_t
             for h in horas:
                 base.append({"Fecha": fecha.date(), "Hora": h})
     return pd.DataFrame(base)
 
-# --- Cargar datos ---
+def exportar_excel(df):
+    df.to_excel("turnos_exportados.xlsx", index=False)
+    with open("turnos_exportados.xlsx", "rb") as f:
+        st.download_button("Descargar turnos en Excel", f, "turnos_exportados.xlsx")
+
+# --- Interfaz ---
+st.title("📅 Turnera Final con Mapa de Calor")
+
+# --- Carga de turnos ---
+st.subheader("➕ Agendar nuevo turno")
+fecha_turno = st.date_input("Fecha")
+dia_semana = fecha_turno.weekday()
+horarios_validos = list(range(7, 12)) + list(range(15, 21)) if dia_semana < 5 else list(range(7, 12))
+hora_seleccionada = st.selectbox("Hora", [f"{h:02d}:00" for h in horarios_validos])
+
+with st.form("form_turno"):
+    paciente = st.text_input("Nombre del paciente")
+    email = st.text_input("Correo electrónico")
+    observaciones = st.text_area("Observaciones")
+    enviar = st.form_submit_button("Guardar turno")
+
+if enviar:
+    if paciente and email and observaciones:
+        agregar_turno(paciente, email, fecha_turno.isoformat(), hora_seleccionada, observaciones)
+        st.success("Turno guardado correctamente.")
+    else:
+        st.warning("Por favor, completá todos los campos.")
+
+# --- Vista semanal con mapa de calor ---
+st.subheader("🟩🟥 Mapa de Calor - Turnos Semanales")
+
 df_turnos = obtener_turnos()
 df_base = generar_base_semanal()
-
-# Unimos base con turnos para identificar ocupación
 df_base["key"] = df_base["Fecha"].astype(str) + " " + df_base["Hora"]
-df_turnos["key"] = df_turnos["Fecha"].dt.date.astype(str) + " " + df_turnos["Hora"]
+df_turnos["key"] = df_turnos["Fecha"].astype(str) + " " + df_turnos["Hora"]
 df_merge = pd.merge(df_base, df_turnos, on="key", how="left")
+df_merge["estado"] = df_merge["Paciente"].notnull().map({True: "Ocupado", False: "Libre"})
 
-# Selector de vista
-st.title("📊 Vistas Semanales de Turnos")
-vista = st.selectbox("Elegí la vista", ["Vista tipo Gantt", "Mapa de calor", "Timeline por paciente"])
+pivot = df_merge.pivot(index="Hora", columns="Fecha", values="estado").fillna("Libre")
 
-# --- Vista tipo Gantt (Plotly) ---
-if vista == "Vista tipo Gantt":
-    st.subheader("📅 Turnos estilo Gantt semanal")
+fig, ax = plt.subplots(figsize=(12, 6))
+sns.heatmap(pivot.replace({"Libre": 0, "Ocupado": 1}), cmap="RdYlGn_r", linewidths=0.5, linecolor='gray', cbar=False, ax=ax)
+ax.set_title("Mapa de calor de turnos (verde: libre / rojo: ocupado)", fontsize=14)
+st.pyplot(fig)
 
-    gantt_data = df_turnos.copy()
-    gantt_data["start"] = gantt_data["Datetime"]
-    gantt_data["end"] = gantt_data["start"] + pd.Timedelta(hours=1)
-    gantt_data["FechaStr"] = gantt_data["Fecha"].dt.strftime("%a %d/%m")
-
-    if not gantt_data.empty:
-        fig = px.timeline(
-            gantt_data,
-            x_start="start",
-            x_end="end",
-            y="FechaStr",
-            color="Paciente",
-            hover_data=["Hora", "Email", "Observaciones"]
-        )
-        fig.update_yaxes(autorange="reversed")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No hay turnos cargados para mostrar.")
-
-# --- Vista Heatmap ---
-elif vista == "Mapa de calor":
-    st.subheader("🟩🟥 Mapa de calor de ocupación")
-
-    df_heat = df_merge.copy()
-    df_heat["estado"] = df_heat["Paciente"].notnull().map({True: "Ocupado", False: "Libre"})
-    pivot = df_heat.pivot(index="Hora", columns="Fecha", values="estado").fillna("Libre")
-
-    fig, ax = plt.subplots(figsize=(12, 6))
-    sns.heatmap(pivot.replace({"Libre": 0, "Ocupado": 1}), cmap="RdYlGn_r", linewidths=0.5, linecolor='gray', cbar=False, ax=ax)
-    ax.set_title("Mapa de calor de turnos (verde: libre / rojo: ocupado)", fontsize=14)
-    st.pyplot(fig)
-
-# --- Vista Timeline por paciente ---
-elif vista == "Timeline por paciente":
-    st.subheader("⏱️ Timeline de turnos por paciente")
-
-    df_timeline = df_turnos.copy()
-    df_timeline["HoraCompleta"] = df_timeline["Datetime"]
-    df_timeline["PacienteHora"] = df_timeline["Paciente"] + " - " + df_timeline["Hora"]
-
-    if not df_timeline.empty:
-        fig = px.timeline(
-            df_timeline,
-            x_start="HoraCompleta",
-            x_end=df_timeline["HoraCompleta"] + pd.Timedelta(minutes=59),
-            y="Paciente",
-            color="Paciente",
-            hover_data=["Fecha", "Hora", "Email", "Observaciones"]
-        )
-        fig.update_yaxes(autorange="reversed")
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No hay turnos cargados para mostrar.")
+# --- Exportar ---
+st.subheader("📤 Exportar turnos")
+if not df_turnos.empty:
+    exportar_excel(df_turnos.drop(columns="ID"))
+else:
+    st.info("No hay turnos para exportar.")
