@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera - Tabla Estética", layout="wide")
+st.set_page_config(page_title="Turnera - Tabla Estética OK", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -65,41 +65,38 @@ df = df.dropna()
 hoy = datetime.today().date()
 semanas = [hoy - timedelta(days=hoy.weekday()) + timedelta(days=7 * i) for i in range(2)]
 dias = [sem + timedelta(days=d) for sem in semanas for d in range(6)]
-dias_labels = [f"<b>{d.strftime('%a %d/%m')}</b>" for d in dias]
+dias_labels = [f"{d.strftime('%a %d/%m')}" for d in dias]
 
-horarios = [f"<b>{h:02d}:00</b>" for h in range(7, 12)] + [f"<b>{h:02d}:00</b>" for h in range(15, 21)]
+horarios = [f"{h:02d}:00" for h in range(7, 12)] + [f"{h:02d}:00" for h in range(15, 21)]
 tabla = pd.DataFrame(index=horarios, columns=dias_labels)
 
 for i, d in enumerate(dias):
-    col = f"<b>{d.strftime('%a %d/%m')}</b>"
+    col = d.strftime("%a %d/%m")
     for h in horarios:
-        hora_limpia = h.replace("<b>", "").replace("</b>", "")
-        turno = df[(df["Fecha"] == d) & (df["Hora"] == hora_limpia)]
+        turno = df[(df["Fecha"] == d) & (df["Hora"] == h)]
         if not turno.empty:
             tabla.loc[h, col] = turno.iloc[0]["Paciente"]
         else:
             tabla.loc[h, col] = "Libre"
 
-# Estilos
-def estilo_tabla(df):
-    estilos = []
-    colores = ["#FFF8DC", "#FFFAE6"]  # dos tonos pastel amarillos
-    for i in range(len(df)):
-        estilo_fila = [{'background-color': colores[i % 2], 'text-align': 'center'} for _ in df.columns]
-        estilos.append(estilo_fila)
-    return pd.DataFrame(estilos, columns=df.columns)
+# Aplicar estilo seguro
+def aplicar_estilo_celda(val):
+    return "text-align: center"
 
-st.write("Visualización semanal (actual + siguiente):")
+def aplicar_filas_alternadas(row_index):
+    return "background-color: #FFF8DC" if row_index % 2 == 0 else "background-color: #FFFAE6"
 
-st.dataframe(tabla.style
-             .apply(estilo_tabla, axis=None)
-             .set_properties(**{'text-align': 'center'})
-             .set_table_styles([{
-                 'selector': 'th',
-                 'props': [('font-weight', 'bold'), ('text-align', 'center')]
-             }]),
-             use_container_width=True,
-             height=480)
+styled = tabla.style.set_properties(**{"text-align": "center"})
+for i in range(len(tabla)):
+    styled = styled.set_table_styles([{ 'selector': f'tr:nth-child({i+1})',
+                                        'props': [('background-color', '#FFF8DC' if i % 2 == 0 else '#FFFAE6')]}], overwrite=False)
+
+styled = styled.set_table_styles([{
+    'selector': 'th',
+    'props': [('font-weight', 'bold'), ('text-align', 'center')]
+}], overwrite=False)
+
+st.dataframe(styled, use_container_width=True)
 
 # Exportación
 st.subheader("📤 Exportar turnos")
