@@ -46,6 +46,7 @@ def obtener_turnos():
     df["Hora"] = df["Hora"].apply(limpiar_hora)
     return df.dropna(subset=["Hora"])
 
+# Carga de turno
 st.title("📅 Turnera Profesional")
 st.subheader("➕ Cargar nuevo turno")
 
@@ -64,9 +65,10 @@ if guardar and paciente and email and obs:
     agregar_turno(paciente, email, fecha.isoformat(), hora, obs)
     st.success("✅ Turno guardado correctamente. Recargá para verlo.")
 
+# Vista semanal
 st.subheader("📆 Vista semanal (actual y siguiente)")
-
 df = obtener_turnos()
+
 hoy = datetime.today().date()
 lunes_actual = hoy - timedelta(days=hoy.weekday())
 semanas = [lunes_actual + timedelta(weeks=i) for i in range(2)]
@@ -75,18 +77,13 @@ dias_labels = [f"{d.strftime('%a %d/%m')}" for d in dias]
 horarios = [f"{h:02d}:00" for h in range(7, 12)] + [f"{h:02d}:00" for h in range(15, 21)]
 
 tabla = pd.DataFrame(index=horarios, columns=dias_labels)
-
 for d in dias:
     col = d.strftime("%a %d/%m")
     for h in horarios:
         turno = df[(df["Fecha"] == d) & (df["Hora"] == h)]
-        if not turno.empty:
-            paciente = turno.iloc[0]["Paciente"]
-            tabla.loc[h, col] = f"{paciente}"
-        else:
-            tabla.loc[h, col] = ""
+        tabla.loc[h, col] = turno.iloc[0]["Paciente"] if not turno.empty else ""
 
-# Estilo
+# Estilo visual tabla
 style = "<style>"
 style += "td, th { text-align: center; padding: 8px; font-family: sans-serif; }"
 style += "table { border-collapse: collapse; width: 100%; }"
@@ -98,39 +95,40 @@ for i, col in enumerate(tabla.columns):
     color = "#fef9c3" if i % 2 == 0 else "#fde68a"
     style += f"td:nth-child({i+2}) {{ background-color: {color}; }}"
 style += "</style>"
-
 html = style + tabla.to_html(escape=False, index=True)
 st.markdown(html, unsafe_allow_html=True)
 
-# Editor de turnos con eliminación corregida
-st.subheader("✏️ Modificar o eliminar turno")
+# Editor robusto por paciente con varios turnos
+st.subheader("✏️ Modificar o eliminar turnos")
 
 if not df.empty:
     nombres = df["Paciente"].unique()
     paciente_sel = st.selectbox("Buscar por paciente", nombres)
-    turno_sel = df[df["Paciente"] == paciente_sel].iloc[0]
+    turnos_paciente = df[df["Paciente"] == paciente_sel]
 
-    with st.form("editar_turno"):
-        nuevo_paciente = st.text_input("Paciente", value=turno_sel["Paciente"])
-        nuevo_email = st.text_input("Email", value=turno_sel["Email"])
-        nueva_obs = st.text_area("Observaciones", value=turno_sel["Observaciones"])
-        guardar_cambio = st.form_submit_button("Guardar cambios")
-
-    if guardar_cambio:
-        actualizar_turno(turno_sel["ID"], nuevo_paciente, nuevo_email, nueva_obs)
-        st.success("✅ Turno actualizado. Recargá la app para ver los cambios.")
-
-    st.markdown("---")
-    st.warning("⚠️ Esta acción no se puede deshacer.")
-    if st.button("🗑️ Eliminar turno seleccionado"):
-        eliminar_turno(turno_sel["ID"])
-        st.success("🗑️ Turno eliminado. Recargá la app.")
-        st.stop()
-
+    for i, row in turnos_paciente.iterrows():
+        with st.expander(f"🕐 {row['Fecha']} {row['Hora']}"):
+            with st.form(f"editar_{row['ID']}"):
+                nuevo_paciente = st.text_input("Paciente", value=row["Paciente"])
+                nuevo_email = st.text_input("Email", value=row["Email"])
+                nueva_obs = st.text_area("Observaciones", value=row["Observaciones"])
+                col1, col2 = st.columns(2)
+                with col1:
+                    guardar_cambio = st.form_submit_button("Guardar cambios")
+                with col2:
+                    eliminar = st.form_submit_button("Eliminar turno")
+                if guardar_cambio:
+                    actualizar_turno(row["ID"], nuevo_paciente, nuevo_email, nueva_obs)
+                    st.success("✅ Turno actualizado. Recargá la app.")
+                    st.experimental_rerun()
+                if eliminar:
+                    eliminar_turno(row["ID"])
+                    st.warning("🗑️ Turno eliminado. Recargá la app.")
+                    st.experimental_rerun()
 else:
     st.info("No hay turnos cargados.")
 
-# Exportar
+# Exportar a Excel
 st.subheader("📤 Exportar a Excel")
 if not df.empty:
     df.drop(columns=["ID"]).to_excel("turnos_exportados.xlsx", index=False)
