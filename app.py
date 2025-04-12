@@ -7,7 +7,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera Final Lista", layout="wide")
+st.set_page_config(page_title="Turnera Final Sin Duplicados", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -65,7 +65,7 @@ def generar_base_semanal():
     return pd.DataFrame(base)
 
 # --- Interfaz ---
-st.title("📅 Turnera Final Lista")
+st.title("📅 Turnera Sin Duplicados")
 
 # --- Carga de turnos ---
 st.subheader("➕ Agendar nuevo turno")
@@ -94,13 +94,17 @@ df_base = generar_base_semanal()
 df_turnos["key"] = df_turnos["Fecha"].astype(str) + "_" + df_turnos["Hora"]
 df_base["key"] = df_base["Fecha"].astype(str) + "_" + df_base["Hora"]
 df_merge = pd.merge(df_base, df_turnos, on="key", how="left", suffixes=("_base", "_turno"))
-df_merge["estado"] = df_merge["Paciente"].notnull().map({True: "Ocupado", False: "Libre"})
+
+# Evitar duplicados en mapa de calor
+df_unique = df_merge.drop_duplicates(subset=["Fecha_base", "Hora_base"])
+
+df_unique["estado"] = df_unique["Paciente"].notnull().map({True: "Ocupado", False: "Libre"})
 
 # --- Mapa de calor ---
 st.subheader("🟩🟥 Mapa de calor de turnos")
 
 try:
-    pivot = df_merge.pivot(index="Hora_base", columns="Fecha_base", values="estado").fillna("Libre")
+    pivot = df_unique.pivot(index="Hora_base", columns="Fecha_base", values="estado").fillna("Libre")
     fig, ax = plt.subplots(figsize=(12, 6))
     sns.heatmap(pivot.replace({"Libre": 0, "Ocupado": 1}),
                 cmap="RdYlGn_r", linewidths=0.5, linecolor='gray', cbar=False, ax=ax)
