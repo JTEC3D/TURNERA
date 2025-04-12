@@ -7,7 +7,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera Final Match OK", layout="wide")
+st.set_page_config(page_title="Turnera Final Lista", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -65,7 +65,7 @@ def generar_base_semanal():
     return pd.DataFrame(base)
 
 # --- Interfaz ---
-st.title("📅 Turnera con Turnos Reflejados Correctamente")
+st.title("📅 Turnera Final Lista")
 
 # --- Carga de turnos ---
 st.subheader("➕ Agendar nuevo turno")
@@ -100,7 +100,7 @@ df_merge["estado"] = df_merge["Paciente"].notnull().map({True: "Ocupado", False:
 st.subheader("🟩🟥 Mapa de calor de turnos")
 
 try:
-    pivot = df_merge.pivot(index="Hora", columns="Fecha_base", values="estado").fillna("Libre")
+    pivot = df_merge.pivot(index="Hora_base", columns="Fecha_base", values="estado").fillna("Libre")
     fig, ax = plt.subplots(figsize=(12, 6))
     sns.heatmap(pivot.replace({"Libre": 0, "Ocupado": 1}),
                 cmap="RdYlGn_r", linewidths=0.5, linecolor='gray', cbar=False, ax=ax)
