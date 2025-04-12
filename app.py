@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera - Tabla Semanal", layout="wide")
+st.set_page_config(page_title="Turnera - Tabla Estética", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -35,7 +35,7 @@ def obtener_turnos():
     return df
 
 # Interfaz
-st.title("🗓️ Turnera - Carga y Tabla Semanal")
+st.title("🗓️ Turnera - Tabla Semanal Estética")
 
 # Carga de turnos
 st.subheader("➕ Cargar nuevo turno")
@@ -57,30 +57,49 @@ if guardar:
         st.warning("⚠️ Completá todos los campos.")
 
 # Vista semanal en tabla
-st.subheader("📅 Tabla semanal de turnos")
+st.subheader("📅 Tabla semanal de turnos (2 semanas)")
 
 df = obtener_turnos()
 df = df.dropna()
 
 hoy = datetime.today().date()
-lunes = hoy - timedelta(days=hoy.weekday())
-dias = [lunes + timedelta(days=i) for i in range(6)]
-dias_labels = [d.strftime("%a %d/%m") for d in dias]
+semanas = [hoy - timedelta(days=hoy.weekday()) + timedelta(days=7 * i) for i in range(2)]
+dias = [sem + timedelta(days=d) for sem in semanas for d in range(6)]
+dias_labels = [f"<b>{d.strftime('%a %d/%m')}</b>" for d in dias]
 
-horarios = [f"{h:02d}:00" for h in range(7, 12)] + [f"{h:02d}:00" for h in range(15, 21)]
+horarios = [f"<b>{h:02d}:00</b>" for h in range(7, 12)] + [f"<b>{h:02d}:00</b>" for h in range(15, 21)]
 tabla = pd.DataFrame(index=horarios, columns=dias_labels)
 
-for d in dias:
-    fecha_str = d.strftime("%Y-%m-%d")
-    col = d.strftime("%a %d/%m")
+for i, d in enumerate(dias):
+    col = f"<b>{d.strftime('%a %d/%m')}</b>"
     for h in horarios:
-        turno = df[(df["Fecha"] == d) & (df["Hora"] == h)]
+        hora_limpia = h.replace("<b>", "").replace("</b>", "")
+        turno = df[(df["Fecha"] == d) & (df["Hora"] == hora_limpia)]
         if not turno.empty:
             tabla.loc[h, col] = turno.iloc[0]["Paciente"]
         else:
             tabla.loc[h, col] = "Libre"
 
-st.dataframe(tabla, use_container_width=True)
+# Estilos
+def estilo_tabla(df):
+    estilos = []
+    colores = ["#FFF8DC", "#FFFAE6"]  # dos tonos pastel amarillos
+    for i in range(len(df)):
+        estilo_fila = [{'background-color': colores[i % 2], 'text-align': 'center'} for _ in df.columns]
+        estilos.append(estilo_fila)
+    return pd.DataFrame(estilos, columns=df.columns)
+
+st.write("Visualización semanal (actual + siguiente):")
+
+st.dataframe(tabla.style
+             .apply(estilo_tabla, axis=None)
+             .set_properties(**{'text-align': 'center'})
+             .set_table_styles([{
+                 'selector': 'th',
+                 'props': [('font-weight', 'bold'), ('text-align', 'center')]
+             }]),
+             use_container_width=True,
+             height=480)
 
 # Exportación
 st.subheader("📤 Exportar turnos")
