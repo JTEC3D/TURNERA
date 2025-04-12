@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera Final Normalizada", layout="wide")
+st.set_page_config(page_title="Turnera Final Limpia", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -31,11 +31,19 @@ def obtener_turnos():
     c.execute("SELECT * FROM turnos")
     df = pd.DataFrame(c.fetchall(), columns=["ID", "Paciente", "Email", "Fecha", "Hora", "Observaciones"])
     df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce").dt.date
-    df["Hora"] = df["Hora"].apply(lambda x: datetime.strptime(str(x).strip()[:5], "%H:%M").strftime("%H:%M"))
+
+    def limpiar_hora(h):
+        try:
+            return datetime.strptime(str(h).strip()[:5], "%H:%M").strftime("%H:%M")
+        except:
+            return None
+
+    df["Hora"] = df["Hora"].apply(limpiar_hora)
+    df = df.dropna(subset=["Hora"])
     return df
 
 # --- Interfaz ---
-st.title("🗓️ Turnera - Horas normalizadas")
+st.title("🗓️ Turnera - Registros Limpios")
 
 # Carga de turnos
 st.subheader("➕ Cargar nuevo turno")
@@ -59,7 +67,7 @@ if guardar:
 # Vista semanal (actual + siguiente)
 st.subheader("📅 Tabla semanal de turnos")
 
-df = obtener_turnos().dropna()
+df = obtener_turnos()
 hoy = datetime.today().date()
 lunes_actual = hoy - timedelta(days=hoy.weekday())
 semanas = [lunes_actual + timedelta(weeks=i) for i in range(2)]
@@ -74,7 +82,7 @@ for d in dias:
         turno = df[(df["Fecha"] == d) & (df["Hora"] == h)]
         tabla.loc[h, col] = turno.iloc[0]["Paciente"] if not turno.empty else "Libre"
 
-# Estilo visible
+# Estilo visual
 html = "<style>td, th { text-align: center; padding: 8px; font-family: sans-serif; }"
 html += "table { border-collapse: collapse; width: 100%; }"
 html += "th { font-weight: bold; background-color: #f4d35e; }"
