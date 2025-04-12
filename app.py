@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera Final Compatible", layout="wide")
+st.set_page_config(page_title="Turnera Final - Año Correcto", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -35,7 +35,7 @@ def obtener_turnos():
     return df
 
 # --- Interfaz ---
-st.title("🗓️ Turnera Final Compatible")
+st.title("🗓️ Turnera Final - Año Correcto")
 
 # Carga de turnos
 st.subheader("➕ Cargar nuevo turno")
@@ -56,13 +56,15 @@ if guardar:
     else:
         st.warning("⚠️ Completá todos los campos.")
 
-# Vista semanal (2 semanas) con estilo
+# Vista semanal (2 semanas) con año actual
 st.subheader("📅 Tabla semanal (actual + siguiente)")
 
 df = obtener_turnos().dropna()
 hoy = datetime.today().date()
-semanas = [hoy - timedelta(days=hoy.weekday()) + timedelta(days=7 * i) for i in range(2)]
-dias = [sem + timedelta(days=d) for sem in semanas for d in range(6)]
+year_actual = hoy.year
+lunes_actual = hoy - timedelta(days=hoy.weekday())
+semanas = [lunes_actual + timedelta(weeks=i) for i in range(2)]
+dias = [lunes + timedelta(days=j) for lunes in semanas for j in range(6)]
 dias_labels = [f"{d.strftime('%a %d/%m')}" for d in dias]
 horarios = [f"{h:02d}:00" for h in range(7, 12)] + [f"{h:02d}:00" for h in range(15, 21)]
 
