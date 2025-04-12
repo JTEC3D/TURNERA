@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera Final Limpia", layout="wide")
+st.set_page_config(page_title="Turnera - Ver Todo", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -43,7 +43,7 @@ def obtener_turnos():
     return df
 
 # --- Interfaz ---
-st.title("🗓️ Turnera - Registros Limpios")
+st.title("🔎 Turnera - Inspección Total")
 
 # Carga de turnos
 st.subheader("➕ Cargar nuevo turno")
@@ -60,14 +60,22 @@ with st.form("form_turno"):
 if guardar:
     if paciente and email and obs:
         agregar_turno(paciente, email, fecha.isoformat(), hora, obs)
-        st.success("✅ Turno guardado correctamente. Recargá la página para verlo en la tabla.")
+        st.success("✅ Turno guardado correctamente. Recargá la página para verlo.")
     else:
         st.warning("⚠️ Completá todos los campos.")
 
-# Vista semanal (actual + siguiente)
-st.subheader("📅 Tabla semanal de turnos")
-
+# Mostrar los turnos reales
 df = obtener_turnos()
+
+st.subheader("📋 Turnos actualmente en la base")
+st.dataframe(df)
+
+if not df.empty:
+    st.markdown(f"🎯 Primer turno: **{df.iloc[0]['Fecha']} {df.iloc[0]['Hora']}**")
+
+# Vista semanal
+st.subheader("📅 Tabla semanal")
+
 hoy = datetime.today().date()
 lunes_actual = hoy - timedelta(days=hoy.weekday())
 semanas = [lunes_actual + timedelta(weeks=i) for i in range(2)]
@@ -82,7 +90,7 @@ for d in dias:
         turno = df[(df["Fecha"] == d) & (df["Hora"] == h)]
         tabla.loc[h, col] = turno.iloc[0]["Paciente"] if not turno.empty else "Libre"
 
-# Estilo visual
+# Mostrar tabla estilizada
 html = "<style>td, th { text-align: center; padding: 8px; font-family: sans-serif; }"
 html += "table { border-collapse: collapse; width: 100%; }"
 html += "th { font-weight: bold; background-color: #f4d35e; }"
@@ -92,12 +100,3 @@ html += "td { font-size: 14px; }</style>"
 html += tabla.to_html(escape=False, index=True)
 
 st.markdown(html, unsafe_allow_html=True)
-
-# Exportar turnos
-st.subheader("📤 Exportar a Excel")
-if not df.empty:
-    df.drop(columns=["ID"]).to_excel("turnos_exportados.xlsx", index=False)
-    with open("turnos_exportados.xlsx", "rb") as f:
-        st.download_button("Descargar Excel", f, "turnos_exportados.xlsx")
-else:
-    st.info("No hay turnos para exportar.")
