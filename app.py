@@ -1,11 +1,14 @@
 
 import streamlit as st
+import pandas as pd
 import sqlite3
 import os
-import pandas as pd
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
+import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-st.set_page_config(page_title="Turnera Horas Seguras", layout="wide")
+st.set_page_config(page_title="Turnera - Vistas Demo", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -14,131 +17,106 @@ c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS turnos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     paciente TEXT,
+    email TEXT,
     fecha TEXT,
     hora TEXT,
     observaciones TEXT
 )''')
 conn.commit()
 
-c.execute("PRAGMA table_info(turnos)")
-columnas = [col[1] for col in c.fetchall()]
-if "email" not in columnas:
-    c.execute("ALTER TABLE turnos ADD COLUMN email TEXT")
-    conn.commit()
-
-# Funciones
-def normalizar_hora(hora_str):
-    try:
-        return datetime.strptime(hora_str.strip(), "%H:%M").strftime("%H:%M")
-    except:
-        try:
-            return datetime.strptime(hora_str.strip(), "%H:%M:%S").strftime("%H:%M")
-        except:
-            return "07:00"
-
-def agregar_turno(paciente, email, fecha, hora, observaciones):
-    hora_str = normalizar_hora(hora)
-    c.execute("INSERT INTO turnos (paciente, email, fecha, hora, observaciones) VALUES (?, ?, ?, ?, ?)",
-              (paciente, email, fecha, hora_str, observaciones))
-    conn.commit()
-
+# --- Funciones ---
 def obtener_turnos():
     c.execute("SELECT * FROM turnos ORDER BY fecha, hora")
     df = pd.DataFrame(c.fetchall(), columns=["ID", "Paciente", "Email", "Fecha", "Hora", "Observaciones"])
-    df["Fecha"] = pd.to_datetime(df["Fecha"]).dt.date
-    df["Hora"] = df["Hora"].apply(lambda h: normalizar_hora(h))
+    df["Fecha"] = pd.to_datetime(df["Fecha"])
+    df["Datetime"] = pd.to_datetime(df["Fecha"].dt.date.astype(str) + " " + df["Hora"])
     return df
 
-def eliminar_turno(turno_id):
-    c.execute("DELETE FROM turnos WHERE id = ?", (turno_id,))
-    conn.commit()
-
-def actualizar_turno(turno_id, paciente, email, fecha, hora, observaciones):
-    hora_str = normalizar_hora(hora)
-    c.execute("UPDATE turnos SET paciente=?, email=?, fecha=?, hora=?, observaciones=? WHERE id=?",
-              (paciente, email, fecha, hora_str, observaciones, turno_id))
-    conn.commit()
-
-def generar_turnos_disponibles(desde):
+def generar_base_semanal():
     horarios_m = [f"{h:02d}:00" for h in list(range(7, 12))]
     horarios_t = [f"{h:02d}:00" for h in list(range(15, 21))]
-    turnos = []
-    for d in range(6):
-        dia = desde + timedelta(days=d)
-        if dia.weekday() < 5:
-            for h in horarios_m + horarios_t:
-                turnos.append({"Fecha": dia.date(), "Hora": h})
-        elif dia.weekday() == 5:
-            for h in horarios_m:
-                turnos.append({"Fecha": dia.date(), "Hora": h})
-    return pd.DataFrame(turnos)
-
-dias_es = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-
-# Interfaz
-st.title("🧠 Turnera - Horas Seguras")
-
-# Formulario de carga
-st.subheader("📅 Agendar nuevo turno")
-fecha_input = st.date_input("Fecha del turno")
-dia_semana = fecha_input.weekday()
-horarios_validos = []
-if dia_semana < 5:
-    horarios_validos = list(range(7, 12)) + list(range(15, 21))
-elif dia_semana == 5:
-    horarios_validos = list(range(7, 12))
-
-hora_str = st.selectbox("Hora del turno", [f"{h:02d}:00" for h in horarios_validos])
-with st.form("form_turno"):
-    paciente = st.text_input("Nombre del paciente")
-    email = st.text_input("Correo electrónico")
-    observaciones = st.text_area("Observaciones")
-    enviar = st.form_submit_button("Guardar turno")
-
-if enviar:
-    if paciente and email and observaciones:
-        agregar_turno(paciente, email, fecha_input.isoformat(), hora_str, observaciones)
-        st.success("Turno agendado correctamente.")
-        st.session_state["turno_seleccionado"] = None
-    else:
-        st.warning("Por favor, completá todos los campos.")
-
-# Cargar turnos
-df_ocupados = obtener_turnos()
-
-# Vista semanal
-def mostrar_vista_semanal(titulo, desde, key_prefix):
-    st.subheader(titulo)
-    df_disp = generar_turnos_disponibles(desde)
-    horas = sorted(df_disp["Hora"].unique())
-    dias = sorted(df_disp["Fecha"].unique())
-
-    header_cols = st.columns(len(dias) + 1)
-    header_cols[0].markdown("**Hora**")
-    for i, dia in enumerate(dias):
-        dia_nombre = dias_es[dia.weekday()]
-        header_cols[i + 1].markdown(f"**{dia_nombre} {dia.strftime('%d/%m')}**")
-
-    for hora in horas:
-        cols = st.columns(len(dias) + 1)
-        cols[0].markdown(f"**{hora}**")
-        for i, dia in enumerate(dias):
-            match = df_ocupados[(df_ocupados["Fecha"] == dia) & (df_ocupados["Hora"] == hora)]
-            if not match.empty:
-                paciente = match.iloc[0]["Paciente"]
-                turno_id = match.iloc[0]["ID"]
-                if cols[i + 1].button(f"{paciente}", key=f"{key_prefix}_{hora}_{dia}"):
-                    st.session_state["turno_seleccionado"] = {
-                        "id": turno_id,
-                        "paciente": paciente,
-                        "email": match.iloc[0]["Email"],
-                        "fecha": dia,
-                        "hora": hora,
-                        "observaciones": match.iloc[0]["Observaciones"]
-                    }
+    horarios = horarios_m + horarios_t
+    base = []
+    hoy = datetime.today()
+    lunes = hoy - timedelta(days=hoy.weekday())
+    for semana in [0, 1]:
+        for dia in range(6):  # Lunes a sábado
+            fecha = lunes + timedelta(days=dia + semana * 7)
+            if fecha.weekday() == 5:
+                horas = horarios_m
             else:
-                cols[i + 1].markdown('<div style="background-color:#d4edda;padding:8px;border-radius:4px;text-align:center">Libre</div>', unsafe_allow_html=True)
+                horas = horarios
+            for h in horas:
+                base.append({"Fecha": fecha.date(), "Hora": h})
+    return pd.DataFrame(base)
 
-hoy = datetime.today()
-mostrar_vista_semanal("📆 Semana actual", hoy - timedelta(days=hoy.weekday()), "actual")
-mostrar_vista_semanal("📆 Semana siguiente", hoy - timedelta(days=hoy.weekday()) + timedelta(days=7), "siguiente")
+# --- Cargar datos ---
+df_turnos = obtener_turnos()
+df_base = generar_base_semanal()
+
+# Unimos base con turnos para identificar ocupación
+df_base["key"] = df_base["Fecha"].astype(str) + " " + df_base["Hora"]
+df_turnos["key"] = df_turnos["Fecha"].dt.date.astype(str) + " " + df_turnos["Hora"]
+df_merge = pd.merge(df_base, df_turnos, on="key", how="left")
+
+# Selector de vista
+st.title("📊 Vistas Semanales de Turnos")
+vista = st.selectbox("Elegí la vista", ["Vista tipo Gantt", "Mapa de calor", "Timeline por paciente"])
+
+# --- Vista tipo Gantt (Plotly) ---
+if vista == "Vista tipo Gantt":
+    st.subheader("📅 Turnos estilo Gantt semanal")
+
+    gantt_data = df_turnos.copy()
+    gantt_data["start"] = gantt_data["Datetime"]
+    gantt_data["end"] = gantt_data["start"] + pd.Timedelta(hours=1)
+    gantt_data["FechaStr"] = gantt_data["Fecha"].dt.strftime("%a %d/%m")
+
+    if not gantt_data.empty:
+        fig = px.timeline(
+            gantt_data,
+            x_start="start",
+            x_end="end",
+            y="FechaStr",
+            color="Paciente",
+            hover_data=["Hora", "Email", "Observaciones"]
+        )
+        fig.update_yaxes(autorange="reversed")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No hay turnos cargados para mostrar.")
+
+# --- Vista Heatmap ---
+elif vista == "Mapa de calor":
+    st.subheader("🟩🟥 Mapa de calor de ocupación")
+
+    df_heat = df_merge.copy()
+    df_heat["estado"] = df_heat["Paciente"].notnull().map({True: "Ocupado", False: "Libre"})
+    pivot = df_heat.pivot(index="Hora", columns="Fecha", values="estado").fillna("Libre")
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    sns.heatmap(pivot.replace({"Libre": 0, "Ocupado": 1}), cmap="RdYlGn_r", linewidths=0.5, linecolor='gray', cbar=False, ax=ax)
+    ax.set_title("Mapa de calor de turnos (verde: libre / rojo: ocupado)", fontsize=14)
+    st.pyplot(fig)
+
+# --- Vista Timeline por paciente ---
+elif vista == "Timeline por paciente":
+    st.subheader("⏱️ Timeline de turnos por paciente")
+
+    df_timeline = df_turnos.copy()
+    df_timeline["HoraCompleta"] = df_timeline["Datetime"]
+    df_timeline["PacienteHora"] = df_timeline["Paciente"] + " - " + df_timeline["Hora"]
+
+    if not df_timeline.empty:
+        fig = px.timeline(
+            df_timeline,
+            x_start="HoraCompleta",
+            x_end=df_timeline["HoraCompleta"] + pd.Timedelta(minutes=59),
+            y="Paciente",
+            color="Paciente",
+            hover_data=["Fecha", "Hora", "Email", "Observaciones"]
+        )
+        fig.update_yaxes(autorange="reversed")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No hay turnos cargados para mostrar.")
