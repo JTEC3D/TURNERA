@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera Final Corregida", layout="wide")
+st.set_page_config(page_title="Turnera Estable", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -20,7 +20,6 @@ c.execute('''CREATE TABLE IF NOT EXISTS turnos (
 )''')
 conn.commit()
 
-# Agregar columna email si falta
 c.execute("PRAGMA table_info(turnos)")
 columnas = [col[1] for col in c.fetchall()]
 if "email" not in columnas:
@@ -60,9 +59,8 @@ def generar_turnos_disponibles(desde):
 dias_es = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
 # --- Interfaz ---
-st.title("🧠 Turnera - Corregida Hora")
+st.title("🧠 Turnera Estable")
 
-# --- Formulario ---
 st.subheader("📅 Agendar nuevo turno")
 with st.form("form_turno"):
     paciente = st.text_input("Nombre del paciente")
@@ -76,15 +74,13 @@ if enviar:
     if paciente and email and observaciones:
         agregar_turno(paciente, email, fecha.isoformat(), hora.strftime("%H:%M"), observaciones)
         st.success("Turno agendado correctamente")
-        st.experimental_rerun()
+        st.session_state["turno_seleccionado"] = None
     else:
         st.warning("Por favor, completá todos los campos.")
 
-# --- Cargar datos actuales ---
 df_ocupados = obtener_turnos()
 df_ocupados["Fecha"] = pd.to_datetime(df_ocupados["Fecha"])
 
-# --- Vista semanal ---
 def mostrar_vista_semanal(titulo, desde, key_prefix):
     st.subheader(titulo)
     df_disp = generar_turnos_disponibles(desde)
@@ -142,10 +138,8 @@ if st.session_state.get("turno_seleccionado"):
         actualizar_turno(turno["id"], nuevo_paciente, nuevo_email, nueva_fecha.isoformat(), nueva_hora.strftime("%H:%M"), nuevas_obs)
         st.success("Turno actualizado correctamente.")
         st.session_state["turno_seleccionado"] = None
-        st.experimental_rerun()
 
     if eliminar:
         eliminar_turno(turno["id"])
         st.warning("Turno eliminado.")
         st.session_state["turno_seleccionado"] = None
-        st.experimental_rerun()
