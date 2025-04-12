@@ -3,9 +3,9 @@ import streamlit as st
 import sqlite3
 import os
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 
-st.set_page_config(page_title="Turnera Estable", layout="wide")
+st.set_page_config(page_title="Turnera Final Completa", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -26,7 +26,7 @@ if "email" not in columnas:
     c.execute("ALTER TABLE turnos ADD COLUMN email TEXT")
     conn.commit()
 
-# Funciones
+# --- Funciones ---
 def agregar_turno(paciente, email, fecha, hora, observaciones):
     c.execute("INSERT INTO turnos (paciente, email, fecha, hora, observaciones) VALUES (?, ?, ?, ?, ?)",
               (paciente, email, fecha, hora, observaciones))
@@ -46,38 +46,54 @@ def actualizar_turno(turno_id, paciente, email, fecha, hora, observaciones):
     conn.commit()
 
 def generar_turnos_disponibles(desde):
-    horarios = [f"{h:02d}:00" for h in list(range(7, 12)) + list(range(15, 21))]
+    horarios_m = [f"{h:02d}:00" for h in list(range(7, 12))]
+    horarios_t = [f"{h:02d}:00" for h in list(range(15, 21))]
     turnos = []
-    for d in range(6):
+    for d in range(6):  # lunes a sábado
         dia = desde + timedelta(days=d)
-        for hora in horarios:
-            if dia.weekday() == 5 and int(hora[:2]) >= 12:
-                continue
-            turnos.append({"Fecha": dia.date(), "Hora": hora})
+        if dia.weekday() < 5:  # lunes a viernes
+            for h in horarios_m + horarios_t:
+                turnos.append({"Fecha": dia.date(), "Hora": h})
+        elif dia.weekday() == 5:  # sábado
+            for h in horarios_m:
+                turnos.append({"Fecha": dia.date(), "Hora": h})
     return pd.DataFrame(turnos)
 
 dias_es = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
-# --- Interfaz ---
-st.title("🧠 Turnera Estable")
+# --- Interfaz principal ---
+st.title("🧠 Turnera Final con Exportación")
 
+# --- Formulario de carga ---
 st.subheader("📅 Agendar nuevo turno")
+
+# Día de la semana seleccionado
+fecha_input = st.date_input("Fecha del turno")
+dia_semana = fecha_input.weekday()
+
+horarios_validos = []
+if dia_semana < 5:  # lunes a viernes
+    horarios_validos = list(range(7, 12)) + list(range(15, 21))
+elif dia_semana == 5:  # sábado
+    horarios_validos = list(range(7, 12))
+
+horario_seleccionado = st.selectbox("Hora del turno", [time(h, 0) for h in horarios_validos])
+
 with st.form("form_turno"):
     paciente = st.text_input("Nombre del paciente")
     email = st.text_input("Correo electrónico")
-    fecha = st.date_input("Fecha del turno")
-    hora = st.time_input("Hora del turno")
     observaciones = st.text_area("Observaciones")
     enviar = st.form_submit_button("Guardar turno")
 
 if enviar:
     if paciente and email and observaciones:
-        agregar_turno(paciente, email, fecha.isoformat(), hora.strftime("%H:%M"), observaciones)
-        st.success("Turno agendado correctamente")
+        agregar_turno(paciente, email, fecha_input.isoformat(), horario_seleccionado.strftime("%H:%M"), observaciones)
+        st.success("Turno agendado correctamente.")
         st.session_state["turno_seleccionado"] = None
     else:
         st.warning("Por favor, completá todos los campos.")
 
+# --- Mostrar vista semanal ---
 df_ocupados = obtener_turnos()
 df_ocupados["Fecha"] = pd.to_datetime(df_ocupados["Fecha"])
 
@@ -143,3 +159,14 @@ if st.session_state.get("turno_seleccionado"):
         eliminar_turno(turno["id"])
         st.warning("Turno eliminado.")
         st.session_state["turno_seleccionado"] = None
+
+# --- Exportar a Excel ---
+st.subheader("📤 Exportar turnos")
+if not df_ocupados.empty:
+    if st.button("Exportar todos los turnos a Excel"):
+        df_export = df_ocupados.drop(columns="ID")
+        df_export.to_excel("turnos_exportados.xlsx", index=False)
+        with open("turnos_exportados.xlsx", "rb") as f:
+            st.download_button("Descargar Excel", data=f, file_name="turnos_exportados.xlsx")
+else:
+    st.info("No hay turnos cargados.")
