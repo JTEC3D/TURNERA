@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta, time
 
-st.set_page_config(page_title="Turnera Fix Turnos", layout="wide")
+st.set_page_config(page_title="Turnera Horas Seguras", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -27,8 +27,17 @@ if "email" not in columnas:
     conn.commit()
 
 # Funciones
+def normalizar_hora(hora_str):
+    try:
+        return datetime.strptime(hora_str.strip(), "%H:%M").strftime("%H:%M")
+    except:
+        try:
+            return datetime.strptime(hora_str.strip(), "%H:%M:%S").strftime("%H:%M")
+        except:
+            return "07:00"
+
 def agregar_turno(paciente, email, fecha, hora, observaciones):
-    hora_str = datetime.strptime(hora, "%H:%M").strftime("%H:%M")
+    hora_str = normalizar_hora(hora)
     c.execute("INSERT INTO turnos (paciente, email, fecha, hora, observaciones) VALUES (?, ?, ?, ?, ?)",
               (paciente, email, fecha, hora_str, observaciones))
     conn.commit()
@@ -37,7 +46,7 @@ def obtener_turnos():
     c.execute("SELECT * FROM turnos ORDER BY fecha, hora")
     df = pd.DataFrame(c.fetchall(), columns=["ID", "Paciente", "Email", "Fecha", "Hora", "Observaciones"])
     df["Fecha"] = pd.to_datetime(df["Fecha"]).dt.date
-    df["Hora"] = df["Hora"].apply(lambda h: datetime.strptime(h.strip(), "%H:%M").strftime("%H:%M"))
+    df["Hora"] = df["Hora"].apply(lambda h: normalizar_hora(h))
     return df
 
 def eliminar_turno(turno_id):
@@ -45,7 +54,7 @@ def eliminar_turno(turno_id):
     conn.commit()
 
 def actualizar_turno(turno_id, paciente, email, fecha, hora, observaciones):
-    hora_str = datetime.strptime(hora, "%H:%M").strftime("%H:%M")
+    hora_str = normalizar_hora(hora)
     c.execute("UPDATE turnos SET paciente=?, email=?, fecha=?, hora=?, observaciones=? WHERE id=?",
               (paciente, email, fecha, hora_str, observaciones, turno_id))
     conn.commit()
@@ -67,7 +76,7 @@ def generar_turnos_disponibles(desde):
 dias_es = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
 
 # Interfaz
-st.title("🧠 Turnera - Turnos Reflejados Correctamente")
+st.title("🧠 Turnera - Horas Seguras")
 
 # Formulario de carga
 st.subheader("📅 Agendar nuevo turno")
