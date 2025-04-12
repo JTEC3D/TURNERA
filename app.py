@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera Final", layout="wide")
+st.set_page_config(page_title="Turnera Final Compatible", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -34,8 +34,8 @@ def obtener_turnos():
     df["Hora"] = df["Hora"].astype(str).str.strip().str[:5]
     return df
 
-# Interfaz
-st.title("🗓️ Turnera Final")
+# --- Interfaz ---
+st.title("🗓️ Turnera Final Compatible")
 
 # Carga de turnos
 st.subheader("➕ Cargar nuevo turno")
@@ -52,12 +52,11 @@ with st.form("form_turno"):
 if guardar:
     if paciente and email and obs:
         agregar_turno(paciente, email, fecha.isoformat(), hora, obs)
-        st.success("✅ Turno guardado correctamente.")
-        st.experimental_rerun()
+        st.success("✅ Turno guardado correctamente. Recargá la página para verlo en la tabla.")
     else:
         st.warning("⚠️ Completá todos los campos.")
 
-# Vista semanal (2 semanas) con estilo visual
+# Vista semanal (2 semanas) con estilo
 st.subheader("📅 Tabla semanal (actual + siguiente)")
 
 df = obtener_turnos().dropna()
@@ -74,7 +73,7 @@ for d in dias:
         turno = df[(df["Fecha"] == d) & (df["Hora"] == h)]
         tabla.loc[h, col] = turno.iloc[0]["Paciente"] if not turno.empty else "Libre"
 
-# Generar HTML con estilos visibles
+# Estilos visibles por HTML
 html = "<style>td, th { text-align: center; padding: 8px; font-family: sans-serif; }"
 html += "table { border-collapse: collapse; width: 100%; }"
 html += "th { font-weight: bold; background-color: #f4d35e; }"
