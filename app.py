@@ -42,6 +42,7 @@ def obtener_turnos():
     df["Hora"] = df["Hora"].apply(limpiar_hora)
     return df.dropna(subset=["Hora"])
 
+# UI
 st.title("📅 Turnera Profesional")
 st.subheader("➕ Cargar nuevo turno")
 
@@ -78,12 +79,11 @@ for d in dias:
         turno = df[(df["Fecha"] == d) & (df["Hora"] == h)]
         if not turno.empty:
             paciente = turno.iloc[0]["Paciente"]
-            turno_id = turno.iloc[0]["ID"]
-            tabla.loc[h, col] = f"✏️ {paciente}"
+            tabla.loc[h, col] = f"{paciente}"
         else:
             tabla.loc[h, col] = ""
 
-# Estilo alternado para columnas
+# Estilo con columnas alternadas
 style = "<style>"
 style += "td, th { text-align: center; padding: 8px; font-family: sans-serif; }"
 style += "table { border-collapse: collapse; width: 100%; }"
@@ -98,3 +98,28 @@ style += "</style>"
 
 html = style + tabla.to_html(escape=False, index=True)
 st.markdown(html, unsafe_allow_html=True)
+
+# Editor de turnos debajo de la tabla
+st.subheader("✏️ Modificar un turno existente")
+if not df.empty:
+    selected_id = st.selectbox("Seleccioná un turno por ID", df["ID"])
+    turno_sel = df[df["ID"] == selected_id].iloc[0]
+    with st.form("edit_form"):
+        nuevo_paciente = st.text_input("Paciente", value=turno_sel["Paciente"])
+        nuevo_email = st.text_input("Email", value=turno_sel["Email"])
+        nueva_obs = st.text_area("Observaciones", value=turno_sel["Observaciones"])
+        guardar_cambio = st.form_submit_button("Guardar cambios")
+        if guardar_cambio:
+            actualizar_turno(selected_id, nuevo_paciente, nuevo_email, nueva_obs)
+            st.success("✅ Turno actualizado. Recargá la app para ver los cambios.")
+else:
+    st.info("No hay turnos cargados para editar.")
+
+# Exportar Excel debajo del editor
+st.subheader("📤 Exportar a Excel")
+if not df.empty:
+    df.drop(columns=["ID"]).to_excel("turnos_exportados.xlsx", index=False)
+    with open("turnos_exportados.xlsx", "rb") as f:
+        st.download_button("Descargar Excel", f, "turnos_exportados.xlsx")
+else:
+    st.info("No hay turnos para exportar.")
