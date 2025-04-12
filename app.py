@@ -86,7 +86,7 @@ for d in dias:
         else:
             tabla.loc[h, col] = ""
 
-# Estilo de tabla
+# Estilo
 style = "<style>"
 style += "td, th { text-align: center; padding: 8px; font-family: sans-serif; }"
 style += "table { border-collapse: collapse; width: 100%; }"
@@ -102,32 +102,35 @@ style += "</style>"
 html = style + tabla.to_html(escape=False, index=True)
 st.markdown(html, unsafe_allow_html=True)
 
-# Editor de turnos con búsqueda por paciente
+# Editor de turnos con eliminación corregida
 st.subheader("✏️ Modificar o eliminar turno")
 
 if not df.empty:
     nombres = df["Paciente"].unique()
     paciente_sel = st.selectbox("Buscar por paciente", nombres)
     turno_sel = df[df["Paciente"] == paciente_sel].iloc[0]
+
     with st.form("editar_turno"):
         nuevo_paciente = st.text_input("Paciente", value=turno_sel["Paciente"])
         nuevo_email = st.text_input("Email", value=turno_sel["Email"])
         nueva_obs = st.text_area("Observaciones", value=turno_sel["Observaciones"])
-        col1, col2 = st.columns(2)
-        with col1:
-            guardar_cambio = st.form_submit_button("Guardar cambios")
-        with col2:
-            eliminar = st.form_submit_button("Eliminar turno")
-        if guardar_cambio:
-            actualizar_turno(turno_sel["ID"], nuevo_paciente, nuevo_email, nueva_obs)
-            st.success("✅ Turno actualizado. Recargá la app para ver los cambios.")
-        if eliminar:
-            eliminar_turno(turno_sel["ID"])
-            st.success("🗑️ Turno eliminado correctamente. Recargá la app.")
+        guardar_cambio = st.form_submit_button("Guardar cambios")
+
+    if guardar_cambio:
+        actualizar_turno(turno_sel["ID"], nuevo_paciente, nuevo_email, nueva_obs)
+        st.success("✅ Turno actualizado. Recargá la app para ver los cambios.")
+
+    st.markdown("---")
+    st.warning("⚠️ Esta acción no se puede deshacer.")
+    if st.button("🗑️ Eliminar turno seleccionado"):
+        eliminar_turno(turno_sel["ID"])
+        st.success("🗑️ Turno eliminado. Recargá la app.")
+        st.stop()
+
 else:
     st.info("No hay turnos cargados.")
 
-# Exportar Excel debajo del editor
+# Exportar
 st.subheader("📤 Exportar a Excel")
 if not df.empty:
     df.drop(columns=["ID"]).to_excel("turnos_exportados.xlsx", index=False)
