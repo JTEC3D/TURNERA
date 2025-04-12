@@ -3,9 +3,9 @@ import streamlit as st
 import sqlite3
 import os
 import pandas as pd
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera Debug", layout="wide")
+st.set_page_config(page_title="Turnera Corregida", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -35,7 +35,7 @@ def obtener_turnos():
     return df
 
 # --- Interfaz ---
-st.title("🛠️ Turnera - Modo Debug")
+st.title("🗓️ Turnera - Turnos corregidos")
 
 # Carga de turnos
 st.subheader("➕ Cargar nuevo turno")
@@ -52,18 +52,14 @@ with st.form("form_turno"):
 if guardar:
     if paciente and email and obs:
         agregar_turno(paciente, email, fecha.isoformat(), hora, obs)
-        st.success("✅ Turno guardado correctamente. Recargá la página para verlo reflejado.")
+        st.success("✅ Turno guardado correctamente. Recargá la página para verlo en la tabla.")
     else:
         st.warning("⚠️ Completá todos los campos.")
 
-# Mostrar todos los turnos guardados
+# Vista semanal (actual + siguiente)
+st.subheader("📅 Tabla semanal de turnos")
+
 df = obtener_turnos().dropna()
-st.subheader("📋 Turnos guardados")
-st.dataframe(df)
-
-# Vista semanal con depuración de fechas
-st.subheader("📅 Tabla semanal (actual + siguiente)")
-
 hoy = datetime.today().date()
 lunes_actual = hoy - timedelta(days=hoy.weekday())
 semanas = [lunes_actual + timedelta(weeks=i) for i in range(2)]
@@ -72,17 +68,13 @@ dias_labels = [f"{d.strftime('%a %d/%m')}" for d in dias]
 horarios = [f"{h:02d}:00" for h in range(7, 12)] + [f"{h:02d}:00" for h in range(15, 21)]
 
 tabla = pd.DataFrame(index=horarios, columns=dias_labels)
-
-debug_log = []
-
 for d in dias:
     col = d.strftime("%a %d/%m")
     for h in horarios:
         turno = df[(df["Fecha"] == d) & (df["Hora"] == h)]
-        debug_log.append(f"⏱️ Comparando Fecha={d} y Hora={h} → {len(turno)} encontrados")
         tabla.loc[h, col] = turno.iloc[0]["Paciente"] if not turno.empty else "Libre"
 
-# Mostrar tabla
+# Estilo visible
 html = "<style>td, th { text-align: center; padding: 8px; font-family: sans-serif; }"
 html += "table { border-collapse: collapse; width: 100%; }"
 html += "th { font-weight: bold; background-color: #f4d35e; }"
@@ -93,6 +85,11 @@ html += tabla.to_html(escape=False, index=True)
 
 st.markdown(html, unsafe_allow_html=True)
 
-# Log de comparación
-st.subheader("🧪 Registro de comparación fecha-hora:")
-st.text("\n".join(debug_log[:100]))
+# Exportar turnos
+st.subheader("📤 Exportar a Excel")
+if not df.empty:
+    df.drop(columns=["ID"]).to_excel("turnos_exportados.xlsx", index=False)
+    with open("turnos_exportados.xlsx", "rb") as f:
+        st.download_button("Descargar Excel", f, "turnos_exportados.xlsx")
+else:
+    st.info("No hay turnos para exportar.")
