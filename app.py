@@ -8,7 +8,7 @@ import plotly.express as px
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-st.set_page_config(page_title="Turnera - Vistas Demo", layout="wide")
+st.set_page_config(page_title="Turnera - Vistas Demo Final", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -28,8 +28,10 @@ conn.commit()
 def obtener_turnos():
     c.execute("SELECT * FROM turnos ORDER BY fecha, hora")
     df = pd.DataFrame(c.fetchall(), columns=["ID", "Paciente", "Email", "Fecha", "Hora", "Observaciones"])
-    df["Fecha"] = pd.to_datetime(df["Fecha"])
-    df["Datetime"] = pd.to_datetime(df["Fecha"].dt.date.astype(str) + " " + df["Hora"])
+    df["Fecha"] = pd.to_datetime(df["Fecha"], errors="coerce")
+    df = df.dropna(subset=["Fecha", "Hora"])
+    df["Hora"] = df["Hora"].astype(str).str.strip().str[:5]
+    df["Datetime"] = pd.to_datetime(df["Fecha"].dt.strftime("%Y-%m-%d") + " " + df["Hora"], errors="coerce")
     return df
 
 def generar_base_semanal():
