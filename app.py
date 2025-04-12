@@ -95,5 +95,4 @@ st.markdown(html, unsafe_allow_html=True)
 
 # Log de comparación
 st.subheader("🧪 Registro de comparación fecha-hora:")
-st.text("
-".join(debug_log[:100]))  # limitar a los primeros 100 para no saturar
+st.text("\n".join(debug_log[:100]))
