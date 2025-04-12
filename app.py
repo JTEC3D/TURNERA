@@ -46,14 +46,11 @@ def obtener_turnos():
     df["Hora"] = df["Hora"].apply(limpiar_hora)
     return df.dropna(subset=["Hora"])
 
-# Carga de turno
 st.title("📅 Turnera Profesional")
 st.subheader("➕ Cargar nuevo turno")
 
 fecha = st.date_input("Fecha")
-dia_semana = fecha.weekday()
-horas_validas = list(range(7, 12)) + list(range(15, 21)) if dia_semana < 5 else list(range(7, 12))
-hora = st.selectbox("Hora", [f"{h:02d}:00" for h in horas_validas])
+hora = st.selectbox("Hora", [f"{h:02d}:00" for h in range(7, 23)])
 
 with st.form("form_turno"):
     paciente = st.text_input("Paciente")
@@ -65,7 +62,6 @@ if guardar and paciente and email and obs:
     agregar_turno(paciente, email, fecha.isoformat(), hora, obs)
     st.success("✅ Turno guardado correctamente. Recargá para verlo.")
 
-# Vista semanal
 st.subheader("📆 Vista semanal (actual y siguiente)")
 df = obtener_turnos()
 
@@ -74,7 +70,7 @@ lunes_actual = hoy - timedelta(days=hoy.weekday())
 semanas = [lunes_actual + timedelta(weeks=i) for i in range(2)]
 dias = [lunes + timedelta(days=j) for lunes in semanas for j in range(6)]
 dias_labels = [f"{d.strftime('%a %d/%m')}" for d in dias]
-horarios = [f"{h:02d}:00" for h in range(7, 12)] + [f"{h:02d}:00" for h in range(15, 21)]
+horarios = [f"{h:02d}:00" for h in range(7, 23)]
 
 tabla = pd.DataFrame(index=horarios, columns=dias_labels)
 for d in dias:
@@ -83,7 +79,6 @@ for d in dias:
         turno = df[(df["Fecha"] == d) & (df["Hora"] == h)]
         tabla.loc[h, col] = turno.iloc[0]["Paciente"] if not turno.empty else ""
 
-# Estilo visual tabla
 style = "<style>"
 style += "td, th { text-align: center; padding: 8px; font-family: sans-serif; }"
 style += "table { border-collapse: collapse; width: 100%; }"
@@ -98,7 +93,6 @@ style += "</style>"
 html = style + tabla.to_html(escape=False, index=True)
 st.markdown(html, unsafe_allow_html=True)
 
-# Editor robusto por paciente con varios turnos
 st.subheader("✏️ Modificar o eliminar turnos")
 
 if not df.empty:
@@ -126,7 +120,6 @@ if not df.empty:
 else:
     st.info("No hay turnos cargados.")
 
-# Exportar a Excel
 st.subheader("📤 Exportar a Excel")
 if not df.empty:
     df.drop(columns=["ID"]).to_excel("turnos_exportados.xlsx", index=False)
