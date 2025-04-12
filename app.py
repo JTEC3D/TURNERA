@@ -5,7 +5,7 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera - Tabla Estética OK", layout="wide")
+st.set_page_config(page_title="Turnera Final", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -35,7 +35,7 @@ def obtener_turnos():
     return df
 
 # Interfaz
-st.title("🗓️ Turnera - Tabla Semanal Estética")
+st.title("🗓️ Turnera Final")
 
 # Carga de turnos
 st.subheader("➕ Cargar nuevo turno")
@@ -53,50 +53,37 @@ if guardar:
     if paciente and email and obs:
         agregar_turno(paciente, email, fecha.isoformat(), hora, obs)
         st.success("✅ Turno guardado correctamente.")
+        st.experimental_rerun()
     else:
         st.warning("⚠️ Completá todos los campos.")
 
-# Vista semanal en tabla
-st.subheader("📅 Tabla semanal de turnos (2 semanas)")
+# Vista semanal (2 semanas) con estilo visual
+st.subheader("📅 Tabla semanal (actual + siguiente)")
 
-df = obtener_turnos()
-df = df.dropna()
-
+df = obtener_turnos().dropna()
 hoy = datetime.today().date()
 semanas = [hoy - timedelta(days=hoy.weekday()) + timedelta(days=7 * i) for i in range(2)]
 dias = [sem + timedelta(days=d) for sem in semanas for d in range(6)]
 dias_labels = [f"{d.strftime('%a %d/%m')}" for d in dias]
-
 horarios = [f"{h:02d}:00" for h in range(7, 12)] + [f"{h:02d}:00" for h in range(15, 21)]
-tabla = pd.DataFrame(index=horarios, columns=dias_labels)
 
-for i, d in enumerate(dias):
+tabla = pd.DataFrame(index=horarios, columns=dias_labels)
+for d in dias:
     col = d.strftime("%a %d/%m")
     for h in horarios:
         turno = df[(df["Fecha"] == d) & (df["Hora"] == h)]
-        if not turno.empty:
-            tabla.loc[h, col] = turno.iloc[0]["Paciente"]
-        else:
-            tabla.loc[h, col] = "Libre"
+        tabla.loc[h, col] = turno.iloc[0]["Paciente"] if not turno.empty else "Libre"
 
-# Aplicar estilo seguro
-def aplicar_estilo_celda(val):
-    return "text-align: center"
+# Generar HTML con estilos visibles
+html = "<style>td, th { text-align: center; padding: 8px; font-family: sans-serif; }"
+html += "table { border-collapse: collapse; width: 100%; }"
+html += "th { font-weight: bold; background-color: #f4d35e; }"
+html += "tr:nth-child(even) { background-color: #fff8dc; }"
+html += "tr:nth-child(odd) { background-color: #fffae6; }"
+html += "td { font-size: 14px; }</style>"
+html += tabla.to_html(escape=False, index=True)
 
-def aplicar_filas_alternadas(row_index):
-    return "background-color: #FFF8DC" if row_index % 2 == 0 else "background-color: #FFFAE6"
-
-styled = tabla.style.set_properties(**{"text-align": "center"})
-for i in range(len(tabla)):
-    styled = styled.set_table_styles([{ 'selector': f'tr:nth-child({i+1})',
-                                        'props': [('background-color', '#FFF8DC' if i % 2 == 0 else '#FFFAE6')]}], overwrite=False)
-
-styled = styled.set_table_styles([{
-    'selector': 'th',
-    'props': [('font-weight', 'bold'), ('text-align', 'center')]
-}], overwrite=False)
-
-st.dataframe(styled, use_container_width=True)
+st.markdown(html, unsafe_allow_html=True)
 
 # Exportación
 st.subheader("📤 Exportar turnos")
