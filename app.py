@@ -11,15 +11,23 @@ st.set_page_config(page_title="Turnera Mejorada", layout="wide")
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
 conn = sqlite3.connect(db_path, check_same_thread=False)
 c = conn.cursor()
+
+# Crear tabla si no existe
 c.execute('''CREATE TABLE IF NOT EXISTS turnos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     paciente TEXT,
-    email TEXT,
     fecha TEXT,
     hora TEXT,
     observaciones TEXT
 )''')
 conn.commit()
+
+# Verificar y agregar columna 'email' si no existe
+c.execute("PRAGMA table_info(turnos)")
+columns = [col[1] for col in c.fetchall()]
+if "email" not in columns:
+    c.execute("ALTER TABLE turnos ADD COLUMN email TEXT")
+    conn.commit()
 
 # --- Funciones ---
 def agregar_turno(paciente, email, fecha, hora, observaciones):
@@ -52,7 +60,7 @@ def generar_turnos_disponibles(desde):
     return pd.DataFrame(turnos)
 
 # --- Inicio ---
-st.title("🧠 Turnera Mejorada Final")
+st.title("🧠 Turnera Mejorada Final (con auto-fix de base de datos)")
 
 # --- Formulario de carga ---
 st.subheader("📅 Agendar nuevo turno")
