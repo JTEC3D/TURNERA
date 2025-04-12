@@ -7,7 +7,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta, time
 
-st.set_page_config(page_title="Turnera Final con Mapa de Calor", layout="wide")
+st.set_page_config(page_title="Turnera Final con Mapa de Calor (Fix)", layout="wide")
 
 # --- Base de datos ---
 db_path = os.path.join(os.path.dirname(__file__), "turnos.db")
@@ -74,7 +74,7 @@ def exportar_excel(df):
         st.download_button("Descargar turnos en Excel", f, "turnos_exportados.xlsx")
 
 # --- Interfaz ---
-st.title("📅 Turnera Final con Mapa de Calor")
+st.title("📅 Turnera Final con Mapa de Calor (Fix)")
 
 # --- Carga de turnos ---
 st.subheader("➕ Agendar nuevo turno")
@@ -104,14 +104,19 @@ df_base = generar_base_semanal()
 df_base["key"] = df_base["Fecha"].astype(str) + " " + df_base["Hora"]
 df_turnos["key"] = df_turnos["Fecha"].astype(str) + " " + df_turnos["Hora"]
 df_merge = pd.merge(df_base, df_turnos, on="key", how="left")
+
+df_merge["Hora"] = df_merge["Hora_x"]
+df_merge["Fecha"] = df_merge["Fecha_x"]
 df_merge["estado"] = df_merge["Paciente"].notnull().map({True: "Ocupado", False: "Libre"})
 
-pivot = df_merge.pivot(index="Hora", columns="Fecha", values="estado").fillna("Libre")
-
-fig, ax = plt.subplots(figsize=(12, 6))
-sns.heatmap(pivot.replace({"Libre": 0, "Ocupado": 1}), cmap="RdYlGn_r", linewidths=0.5, linecolor='gray', cbar=False, ax=ax)
-ax.set_title("Mapa de calor de turnos (verde: libre / rojo: ocupado)", fontsize=14)
-st.pyplot(fig)
+try:
+    pivot = df_merge.pivot(index="Hora", columns="Fecha", values="estado").fillna("Libre")
+    fig, ax = plt.subplots(figsize=(12, 6))
+    sns.heatmap(pivot.replace({"Libre": 0, "Ocupado": 1}), cmap="RdYlGn_r", linewidths=0.5, linecolor='gray', cbar=False, ax=ax)
+    ax.set_title("Mapa de calor de turnos (verde: libre / rojo: ocupado)", fontsize=14)
+    st.pyplot(fig)
+except Exception as e:
+    st.error(f"No se pudo generar el mapa de calor. Error: {e}")
 
 # --- Exportar ---
 st.subheader("📤 Exportar turnos")
