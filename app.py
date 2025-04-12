@@ -5,27 +5,39 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Turnera - Diagnóstico de Guardado", layout="wide")
+st.set_page_config(page_title="Turnera - Diagnóstico Total", layout="wide")
+
+# --- Diagnóstico del sistema de archivos ---
+st.sidebar.title("🧪 Diagnóstico de entorno")
+
+base_dir = os.path.dirname(__file__)
+db_filename = "turnos.db"
+db_path = os.path.join(base_dir, db_filename)
+
+st.sidebar.write(f"📁 Carpeta actual: `{base_dir}`")
+st.sidebar.write(f"📄 Archivo DB: `{db_path}`")
+st.sidebar.write(f"🧾 Contenido del directorio:")
+st.sidebar.code("\n".join(os.listdir(base_dir)))
+
+# Comprobar existencia y tamaño de la base
+if os.path.exists(db_path):
+    size = os.path.getsize(db_path)
+    st.sidebar.success(f"✅ Base de datos encontrada ({size} bytes)")
+else:
+    st.sidebar.warning("⚠️ No se encontró el archivo de la base")
 
 # --- Base de datos ---
-db_filename = "turnos.db"
-db_path = os.path.join(os.path.dirname(__file__), db_filename)
-st.sidebar.markdown(f"📂 Ruta de la base: `{db_path}`")
-
-try:
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS turnos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        paciente TEXT,
-        email TEXT,
-        fecha TEXT,
-        hora TEXT,
-        observaciones TEXT
-    )''')
-    conn.commit()
-except Exception as e:
-    st.error(f"❌ Error al abrir la base de datos: {e}")
+conn = sqlite3.connect(db_path, check_same_thread=False)
+c = conn.cursor()
+c.execute('''CREATE TABLE IF NOT EXISTS turnos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    paciente TEXT,
+    email TEXT,
+    fecha TEXT,
+    hora TEXT,
+    observaciones TEXT
+)''')
+conn.commit()
 
 # Funciones
 def agregar_turno(paciente, email, fecha, hora, observaciones):
@@ -33,10 +45,10 @@ def agregar_turno(paciente, email, fecha, hora, observaciones):
         c.execute("INSERT INTO turnos (paciente, email, fecha, hora, observaciones) VALUES (?, ?, ?, ?, ?)",
                   (paciente, email, fecha, hora, observaciones))
         conn.commit()
-        return True
+        return conn.total_changes  # número de cambios realizados
     except Exception as e:
         st.error(f"❌ Error al guardar en la base: {e}")
-        return False
+        return 0
 
 def obtener_turnos():
     try:
@@ -58,7 +70,7 @@ def obtener_turnos():
         return pd.DataFrame()
 
 # --- Interfaz ---
-st.title("🛠️ Turnera - Verificación de Guardado")
+st.title("🛠️ Turnera - Diagnóstico de Guardado Total")
 
 # Formulario de carga
 st.subheader("➕ Cargar nuevo turno")
@@ -74,17 +86,16 @@ with st.form("form_turno"):
 
 if guardar:
     if paciente and email and obs:
-        exito = agregar_turno(paciente, email, fecha.isoformat(), hora, obs)
-        if exito:
-            st.success("✅ Turno guardado correctamente.")
+        cambios = agregar_turno(paciente, email, fecha.isoformat(), hora, obs)
+        if cambios > 0:
+            st.success(f"✅ Turno guardado correctamente. Cambios: {cambios}")
         else:
-            st.error("❌ Algo falló al intentar guardar el turno.")
+            st.error("❌ No se guardó el turno. Revisa permisos o entorno.")
     else:
         st.warning("⚠️ Completá todos los campos.")
 
 # Mostrar contenido real de la base
 df = obtener_turnos()
-
 st.subheader("📋 Turnos guardados en la base de datos:")
 st.dataframe(df)
 
