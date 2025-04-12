@@ -109,9 +109,9 @@ if not df.empty:
     for i, row in turnos_paciente.iterrows():
         with st.expander(f"🕐 {row['Fecha']} {row['Hora']}"):
             with st.form(f"editar_{row['ID']}"):
-                nuevo_paciente = st.text_input("Paciente", value=row["Paciente"])
-                nuevo_email = st.text_input("Email", value=row["Email"])
-                nueva_obs = st.text_area("Observaciones", value=row["Observaciones"])
+                nuevo_paciente = st.text_input("Paciente", value=row["Paciente"], key=f"p_{row['ID']}")
+                nuevo_email = st.text_input("Email", value=row["Email"], key=f"e_{row['ID']}")
+                nueva_obs = st.text_area("Observaciones", value=row["Observaciones"], key=f"o_{row['ID']}")
                 col1, col2 = st.columns(2)
                 with col1:
                     guardar_cambio = st.form_submit_button("Guardar cambios")
@@ -119,12 +119,10 @@ if not df.empty:
                     eliminar = st.form_submit_button("Eliminar turno")
                 if guardar_cambio:
                     actualizar_turno(row["ID"], nuevo_paciente, nuevo_email, nueva_obs)
-                    st.success("✅ Turno actualizado. Recargá la app.")
-                    st.experimental_rerun()
+                    st.success("✅ Turno actualizado. Recargá la app para ver los cambios.")
                 if eliminar:
                     eliminar_turno(row["ID"])
-                    st.warning("🗑️ Turno eliminado. Recargá la app.")
-                    st.experimental_rerun()
+                    st.warning("🗑️ Turno eliminado. Recargá la app para ver los cambios.")
 else:
     st.info("No hay turnos cargados.")
 
